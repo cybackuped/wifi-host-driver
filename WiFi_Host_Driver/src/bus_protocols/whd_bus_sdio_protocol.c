@@ -539,7 +539,6 @@ exit:
 uint32_t whd_bus_sdio_packet_available_to_read(whd_driver_t whd_driver)
 {
     uint32_t int_status = 0;
-    uint32_t hmb_data = 0;
 
     /* Ensure the wlan backplane bus is up */
     CHECK_RETURN(whd_ensure_wlan_bus_is_up(whd_driver) );
@@ -551,23 +550,6 @@ uint32_t whd_bus_sdio_packet_available_to_read(whd_driver_t whd_driver)
         WPRINT_WHD_ERROR( ("%s: Error reading interrupt status\n", __FUNCTION__) );
         int_status = 0;
         goto exit;
-    }
-
-    if ( (I_HMB_HOST_INT & int_status) != 0 )
-    {
-        /* Read mailbox data and ack that we did so */
-        if (whd_bus_read_backplane_value(whd_driver,  SDIO_TO_HOST_MAILBOX_DATA(whd_driver), 4,
-                                         (uint8_t *)&hmb_data) == WHD_SUCCESS)
-            if (whd_bus_write_backplane_value(whd_driver, SDIO_TO_SB_MAILBOX(whd_driver), (uint8_t)4,
-                                              SMB_INT_ACK) != WHD_SUCCESS)
-                WPRINT_WHD_ERROR( ("%s: Failed writing SMB_INT_ACK\n", __FUNCTION__) );
-
-        /* dongle indicates the firmware has halted/crashed */
-        if ( (I_HMB_DATA_FWHALT & hmb_data) != 0 )
-        {
-            WPRINT_WHD_ERROR( ("%s: mailbox indicates firmware halted\n", __FUNCTION__) );
-            whd_wifi_print_whd_log(whd_driver);
-        }
     }
 
     if ( (HOSTINTMASK & int_status) != 0 )
@@ -653,7 +635,7 @@ whd_result_t whd_bus_sdio_read_frame(whd_driver_t whd_driver, whd_buffer_t *buff
                                                                                        extra_space_required +
                                                                                        (uint16_t)sizeof(
                                                                                            whd_buffer_header_t) ),
-                                 (whd_sdpcm_has_tx_packet(whd_driver) ? 0 : WHD_RX_BUF_TIMEOUT) );
+                                 WHD_FALSE);
     if (result != WHD_SUCCESS)
     {
         /* Read out the first 12 bytes to get the bus credit information, 4 bytes are already read in hwtag */
@@ -1053,7 +1035,7 @@ static whd_result_t whd_bus_sdio_abort_read(whd_driver_t whd_driver, whd_bool_t 
     /* If we want to retry message, send NAK */
     if (retry == WHD_TRUE)
     {
-        CHECK_RETURN(whd_bus_write_backplane_value(whd_driver, (uint32_t)SDIO_TO_SB_MAILBOX(whd_driver), (uint8_t)1,
+        CHECK_RETURN(whd_bus_write_backplane_value(whd_driver, (uint32_t)SDIO_TO_SB_MAIL_BOX(whd_driver), (uint8_t)1,
                                                    SMB_NAK) );
     }
 
@@ -1069,7 +1051,8 @@ whd_result_t whd_bus_sdio_read_register_value(whd_driver_t whd_driver, whd_bus_f
 
 whd_result_t whd_bus_sdio_poke_wlan(whd_driver_t whd_driver)
 {
-    return whd_bus_write_backplane_value(whd_driver, SDIO_TO_SB_MAILBOX(whd_driver), (uint8_t)4, SMB_DEV_INT);
+    /*TODO: change 1<<3 to a register hash define */
+    return whd_bus_write_backplane_value(whd_driver, SDIO_TO_SB_MAILBOX(whd_driver), (uint8_t)4, (uint32_t)(1 << 3) );
 }
 
 whd_result_t whd_bus_sdio_wakeup(whd_driver_t whd_driver)

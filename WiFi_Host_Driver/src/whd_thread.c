@@ -219,13 +219,16 @@ void whd_thread_quit(whd_driver_t whd_driver)
     /* signal main thread and wake it */
     thread_info->thread_quit_flag = WHD_TRUE;
     result = cy_rtos_set_semaphore(&thread_info->transceive_semaphore, WHD_FALSE);
-    if (result != WHD_SUCCESS)
+    if (result == WHD_SUCCESS)
+    {
+        /* Wait for the WHD thread to end */
+        cy_rtos_join_thread(&thread_info->whd_thread);
+    }
+    else
     {
         WPRINT_WHD_ERROR( ("Error setting semaphore in %s at %d \n", __func__, __LINE__) );
     }
 
-    /* Wait for the WHD thread to end */
-    cy_rtos_join_thread(&thread_info->whd_thread);
     /* Delete the semaphore */
     /* Ignore return - not much can be done about failure */
     (void)cy_rtos_deinit_semaphore(&thread_info->transceive_semaphore);
@@ -302,6 +305,9 @@ static void whd_thread_func(whd_thread_arg_t thread_input)
             /* Check if the interrupt indicated there is a packet to read */
             if (whd_bus_packet_available_to_read(whd_driver) != 0)
             {
+                /* workaround solution for CMD53 error on PSOC6 1M + 4343w */
+                if (whd_chip_get_chip_id(whd_driver) == 43430)
+                    (void )cy_rtos_delay_milliseconds( (uint32_t)1 );
                 /* Receive all available packets */
                 do
                 {
